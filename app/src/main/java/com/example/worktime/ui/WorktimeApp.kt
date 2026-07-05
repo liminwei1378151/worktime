@@ -71,6 +71,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private enum class MainTab(val title: String) {
+    HOME("首页"),
     CALENDAR("日历"),
     EDITOR("方案"),
     SETTINGS("设置")
@@ -134,6 +135,8 @@ fun WorktimeApp(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             when (currentTab) {
+                MainTab.HOME -> HomeScreen(uiState = uiState)
+
                 MainTab.CALENDAR -> CalendarScreen(
                     uiState = uiState,
                     onPrevMonth = { viewModel.changeMonth(-1) },
@@ -156,6 +159,24 @@ fun WorktimeApp(
                     onSavePlan = viewModel::savePlan
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    uiState: MainUiState
+) {
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            Text(
+                text = "工作列表",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        item {
+            WorkEventListSection(uiState = uiState)
         }
     }
 }
@@ -268,7 +289,6 @@ private fun CalendarScreen(
     val scrollState = rememberScrollState()
 
     var editingEvent by remember { mutableStateOf<PlanHistoryEvent?>(null) }
-    var isListView by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -287,175 +307,128 @@ private fun CalendarScreen(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
-            TextButton(onClick = { isListView = !isListView }) {
-                Text(if (isListView) "月历" else "列表", fontSize = 12.sp)
-            }
             TextButton(onClick = onNextMonth) { Text("下个月") }
         }
 
-        if (isListView) {
-            val sortedWorkEvents = uiState.workEvents
-                .sortedBy { it.startAtEpochMillis }
-            val eventsByDate = sortedWorkEvents
-                .groupBy { toLocalDate(it.startAtEpochMillis) }
-                .toSortedMap(compareBy { it })
-
-            if (eventsByDate.isEmpty()) {
-                Text(
-                    text = "没有工作安排",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(vertical = 24.dp)
-                )
-            } else {
-                eventsByDate.forEach { (date, events) ->
-                    val dayOfWeek = WEEKDAY_LABELS.getOrElse(date.dayOfWeek.value - 1) { "" }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "${date.monthValue}月${date.dayOfMonth}日 周$dayOfWeek",
-                        style = MaterialTheme.typography.titleSmall,
+                        text = "${uiState.remainingWorkCount}",
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    events.forEach { event ->
-                        val isPast = event.startAtEpochMillis < uiState.nowEpochMillis
-                        val workHour = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
-                            .atZone(java.time.ZoneId.systemDefault()).hour
-                        val workMinute = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
-                            .atZone(java.time.ZoneId.systemDefault()).minute
-                        val activities = com.example.worktime.domain.model.DailyActivity.getActivitiesForWork(workHour, workMinute)
-                        val activitiesText = if (activities.isNotEmpty()) " ${activities.joinToString(" ")}" else ""
-                        Text(
-                            text = "工作 ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}$activitiesText",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                textDecoration = if (isPast) TextDecoration.LineThrough else null
-                            ),
-                            color = if (isPast) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color.Unspecified,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-            }
-        } else {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${uiState.remainingWorkCount}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "剩余工作",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${uiState.remainingRestCount}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.tertiary
-                        )
-                        Text(
-                            text = "剩余休息",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "${uiState.remainingNightShiftCount}",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        Text(
-                            text = "剩余熬夜",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                WEEKDAY_LABELS.forEach { label ->
                     Text(
-                        text = label,
+                        text = "剩余工作",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${uiState.remainingRestCount}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.tertiary
+                    )
+                    Text(
+                        text = "剩余休息",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${uiState.remainingNightShiftCount}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Text(
+                        text = "剩余熬夜",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
+        }
 
-            cells.chunked(7).forEach { week ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    week.forEach { date ->
-                        if (date == null) {
-                            Box(modifier = Modifier.size(width = 46.dp, height = 52.dp))
-                        } else {
-                            val isSelected = date == uiState.selectedDate
-                            val hasCurrentWork = workEventDates.containsKey(date)
-                            val hasHistoryWork = historyEventDates.containsKey(date)
-                            val isNightShift = uiState.nightShiftDates.contains(date)
-                            Box(
-                                modifier = Modifier
-                                    .size(width = 46.dp, height = 52.dp)
-                                    .padding(2.dp)
-                                    .background(
-                                        color = when {
-                                            isNightShift -> MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
-                                            isSelected -> MaterialTheme.colorScheme.primaryContainer
-                                            else -> Color.Transparent
-                                        },
-                                        shape = RoundedCornerShape(10.dp)
-                                    )
-                                    .clickable { onSelectDate(date) }
-                                    .padding(4.dp)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            WEEKDAY_LABELS.forEach { label ->
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        cells.chunked(7).forEach { week ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                week.forEach { date ->
+                    if (date == null) {
+                        Box(modifier = Modifier.size(width = 46.dp, height = 52.dp))
+                    } else {
+                        val isSelected = date == uiState.selectedDate
+                        val hasCurrentWork = workEventDates.containsKey(date)
+                        val hasHistoryWork = historyEventDates.containsKey(date)
+                        val isNightShift = uiState.nightShiftDates.contains(date)
+                        Box(
+                            modifier = Modifier
+                                .size(width = 46.dp, height = 52.dp)
+                                .padding(2.dp)
+                                .background(
+                                    color = when {
+                                        isNightShift -> MaterialTheme.colorScheme.error.copy(alpha = 0.2f)
+                                        isSelected -> MaterialTheme.colorScheme.primaryContainer
+                                        else -> Color.Transparent
+                                    },
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .clickable { onSelectDate(date) }
+                                .padding(4.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.SpaceBetween
+                                Text(
+                                    text = date.dayOfMonth.toString(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isNightShift) MaterialTheme.colorScheme.error else Color.Unspecified
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Text(
-                                        text = date.dayOfMonth.toString(),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isNightShift) MaterialTheme.colorScheme.error else Color.Unspecified
-                                    )
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        if (hasCurrentWork) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(6.dp)
-                                                    .background(
-                                                        color = if (isNightShift) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                                        shape = RoundedCornerShape(99.dp)
-                                                    )
-                                            )
-                                        }
-                                        if (hasHistoryWork) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(6.dp)
-                                                    .background(
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                        shape = RoundedCornerShape(99.dp)
-                                                    )
-                                            )
-                                        }
+                                    if (hasCurrentWork) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(
+                                                    color = if (isNightShift) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                                    shape = RoundedCornerShape(99.dp)
+                                                )
+                                        )
+                                    }
+                                    if (hasHistoryWork) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                    shape = RoundedCornerShape(99.dp)
+                                                )
+                                        )
                                     }
                                 }
                             }
@@ -463,75 +436,75 @@ private fun CalendarScreen(
                     }
                 }
             }
+        }
 
-            HorizontalDivider()
-            Text(
-                text = "当日明细：${uiState.selectedDate}",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
+        HorizontalDivider()
+        Text(
+            text = "当日明细：${uiState.selectedDate}",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
 
-            val dayEvents = uiState.events.filter { toLocalDate(it.startAtEpochMillis) == uiState.selectedDate }
-            val dayHistoryEvents = uiState.historyEvents.filter { toLocalDate(it.startAtEpochMillis) == uiState.selectedDate }
+        val dayEvents = uiState.events.filter { toLocalDate(it.startAtEpochMillis) == uiState.selectedDate }
+        val dayHistoryEvents = uiState.historyEvents.filter { toLocalDate(it.startAtEpochMillis) == uiState.selectedDate }
 
-            if (dayEvents.isEmpty() && dayHistoryEvents.isEmpty()) {
-                Text("当天无事件")
-            } else {
-                    dayEvents.forEach { event ->
-                        val typeText = if (event.type == ShiftEventType.WORK) "工作" else "休息"
-                    val activitiesText = if (event.type == ShiftEventType.WORK) {
-                        val workHour = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
-                            .atZone(java.time.ZoneId.systemDefault()).hour
-                        val workMinute = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
-                            .atZone(java.time.ZoneId.systemDefault()).minute
-                        val activities = com.example.worktime.domain.model.DailyActivity.getActivitiesForWork(workHour, workMinute)
-                        if (activities.isNotEmpty()) " ${activities.joinToString(" ")}" else ""
-                    } else ""
+        if (dayEvents.isEmpty() && dayHistoryEvents.isEmpty()) {
+            Text("当天无事件")
+        } else {
+            dayEvents.forEach { event ->
+                val typeText = if (event.type == ShiftEventType.WORK) "工作" else "休息"
+                val activitiesText = if (event.type == ShiftEventType.WORK) {
+                    val workHour = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
+                        .atZone(java.time.ZoneId.systemDefault()).hour
+                    val workMinute = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
+                        .atZone(java.time.ZoneId.systemDefault()).minute
+                    val activities = com.example.worktime.domain.model.DailyActivity.getActivitiesForWork(workHour, workMinute)
+                    if (activities.isNotEmpty()) " ${activities.joinToString(" ")}" else ""
+                } else ""
+                Text(
+                    text = "$typeText ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}$activitiesText"
+                )
+            }
+
+            val routinePlan = uiState.selectedDateRoutinePlan
+            DailyRoutineSection(routinePlan = routinePlan)
+
+            if (dayHistoryEvents.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Text(
-                        text = "$typeText ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}$activitiesText"
+                        text = "历史记录",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    TextButton(
+                        onClick = { onDeleteHistoryEventsByDate(uiState.selectedDate) }
+                    ) {
+                        Text("删除当天", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                    }
                 }
-
-                val routinePlan = uiState.selectedDateRoutinePlan
-                DailyRoutineSection(routinePlan = routinePlan)
-
-                if (dayHistoryEvents.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
+                dayHistoryEvents.forEach { event ->
+                    val typeText = if (event.type == ShiftEventType.WORK) "工作" else "休息"
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "历史记录",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
+                            text = "[历史] $typeText ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        TextButton(
-                            onClick = { onDeleteHistoryEventsByDate(uiState.selectedDate) }
-                        ) {
-                            Text("删除当天", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                    dayHistoryEvents.forEach { event ->
-                        val typeText = if (event.type == ShiftEventType.WORK) "工作" else "休息"
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "[历史] $typeText ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Row {
-                                TextButton(
-                                    onClick = { editingEvent = event }
-                                ) {
-                                    Text("编辑", fontSize = 12.sp)
-                                }
+                        Row {
+                            TextButton(
+                                onClick = { editingEvent = event }
+                            ) {
+                                Text("编辑", fontSize = 12.sp)
                             }
                         }
                     }
@@ -553,6 +526,55 @@ private fun CalendarScreen(
 }
 
 @Composable
+private fun WorkEventListSection(
+    uiState: MainUiState
+) {
+    val sortedWorkEvents = uiState.workEvents.sortedBy { it.startAtEpochMillis }
+    val eventsByDate = sortedWorkEvents
+        .groupBy { toLocalDate(it.startAtEpochMillis) }
+        .toSortedMap(compareBy { it })
+
+    if (eventsByDate.isEmpty()) {
+        Text(
+            text = "没有工作安排",
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 24.dp)
+        )
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        eventsByDate.forEach { (date, events) ->
+            val dayOfWeek = WEEKDAY_LABELS.getOrElse(date.dayOfWeek.value - 1) { "" }
+            Text(
+                text = "${date.monthValue}月${date.dayOfMonth}日 周$dayOfWeek",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            events.forEach { event ->
+                val isPast = event.startAtEpochMillis < uiState.nowEpochMillis
+                val workHour = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
+                    .atZone(java.time.ZoneId.systemDefault()).hour
+                val workMinute = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
+                    .atZone(java.time.ZoneId.systemDefault()).minute
+                val activities = com.example.worktime.domain.model.DailyActivity.getActivitiesForWork(workHour, workMinute)
+                val activitiesText = if (activities.isNotEmpty()) " ${activities.joinToString(" ")}" else ""
+                Text(
+                    text = "工作 ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}$activitiesText",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        textDecoration = if (isPast) TextDecoration.LineThrough else null
+                    ),
+                    color = if (isPast) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color.Unspecified,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DailyRoutineSection(routinePlan: DailyRoutinePlan) {
     Spacer(Modifier.height(8.dp))
     Text(
@@ -561,24 +583,18 @@ private fun DailyRoutineSection(routinePlan: DailyRoutinePlan) {
         fontWeight = FontWeight.Bold
     )
 
-    Text(
-        text = "吃饭",
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.SemiBold
-    )
-    routinePlan.meals.forEach { meal ->
-        Text("${meal.type.label} ${formatClockTime(meal.scheduledAtEpochMillis)} ${meal.note}")
-    }
-
     Spacer(Modifier.height(6.dp))
     Text(
         text = "补品",
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold
     )
-    routinePlan.supplements.forEach { supplement ->
-        Text("${formatClockTime(supplement.scheduledAtEpochMillis)} ${supplement.name} ${supplement.note}")
-    }
+    routinePlan.supplements
+        .groupBy { it.scheduledAtEpochMillis }
+        .toSortedMap()
+        .forEach { (time, supplements) ->
+            Text("${formatClockTime(time)} ${supplements.joinToString("、") { it.name }}")
+        }
 
     Spacer(Modifier.height(6.dp))
     Text(

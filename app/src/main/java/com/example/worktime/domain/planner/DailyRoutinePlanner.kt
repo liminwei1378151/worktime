@@ -40,14 +40,12 @@ data class DailyRoutinePlan(
 )
 
 object DailyRoutinePlanner {
-    private val workSupplementOffset: Duration = Duration.ofMinutes(25)
-    private val workWakeBuffer: Duration = Duration.ofMinutes(90)
+    private val workWakeBuffer: Duration = Duration.ofMinutes(25)
     private val postWorkCooldown: Duration = Duration.ofMinutes(30)
     private val mealDuration: Duration = Duration.ofMinutes(45)
     private val minimumSleep: Duration = Duration.ofMinutes(120)
     private val mealSupplementOffset: Duration = Duration.ofMinutes(10)
     private val mealMedicineOffset: Duration = Duration.ofMinutes(15)
-    private val afternoonSnackTime: LocalTime = LocalTime.of(15, 30)
 
     fun planForDate(
         date: LocalDate,
@@ -88,37 +86,64 @@ object DailyRoutinePlanner {
         workEvents: List<ShiftEvent>,
         zoneId: ZoneId
     ): List<SupplementPlan> {
+        val mealsByType = meals.associateBy { it.type }
         val supplements = mutableListOf<SupplementPlan>()
-        val breakfast = meals.first { it.type == MealType.BREAKFAST }
-        val lunch = meals.first { it.type == MealType.LUNCH }
-        val dinner = meals.first { it.type == MealType.DINNER }
+        val breakfast = mealsByType.getValue(MealType.BREAKFAST)
+        val lunch = mealsByType.getValue(MealType.LUNCH)
+        val dinner = mealsByType.getValue(MealType.DINNER)
 
-        supplements += SupplementPlan("纯牛奶", breakfast.scheduledAtEpochMillis, "早餐时一起吃")
-        supplements += SupplementPlan("坚果", breakfast.scheduledAtEpochMillis, "早餐时一起吃")
-        supplements += SupplementPlan("复合VB", breakfast.scheduledAtEpochMillis + mealSupplementOffset.toMillis(), "早餐后补充")
-        supplements += SupplementPlan("VD", breakfast.scheduledAtEpochMillis + mealSupplementOffset.toMillis(), "早餐后配坚果/牛奶")
-        supplements += SupplementPlan("护肝片", lunch.scheduledAtEpochMillis + mealMedicineOffset.toMillis(), "午饭后")
-        supplements += SupplementPlan("VC", dinner.scheduledAtEpochMillis + mealMedicineOffset.toMillis(), "晚饭后")
-
-        val workRelatedSupplements = workEvents.flatMap { workEvent ->
-            val plannedAt = workEvent.startAtEpochMillis - workSupplementOffset.toMillis()
-            listOf(
-                SupplementPlan("党参生脉饮", plannedAt, "上班前25分钟"),
-                SupplementPlan("红枣", plannedAt, "上班前垫一口")
-            )
-        }.filter { it.scheduledAtEpochMillis.toLocalDate(zoneId) == date }
-
-        if (workRelatedSupplements.isEmpty()) {
-            supplements += SupplementPlan(
-                name = "红枣",
-                scheduledAtEpochMillis = LocalDateTime.of(date, afternoonSnackTime).toEpochMillis(zoneId),
-                note = "下午加餐"
-            )
-        } else {
-            supplements += workRelatedSupplements
+        val breakfastSupplementTime = supplementTimeForMeal(date, breakfast, workEvents, zoneId)
+        supplements += listOf("纯牛奶", "坚果", "复合VB", "VD", "红枣").map { name ->
+            SupplementPlan(name, breakfastSupplementTime, "早餐后")
         }
 
-        return supplements.sortedBy { it.scheduledAtEpochMillis }
+        val lunchSupplementTime = supplementTimeForMeal(date, lunch, workEvents, zoneId)
+        supplements += SupplementPlan("护肝片", lunchSupplementTime, "午饭后")
+
+        val dinnerSupplementTime = supplementTimeForMeal(date, dinner, workEvents, zoneId)
+        supplements += SupplementPlan("VC", dinnerSupplementTime, "晚饭后")
+
+        val preMealTarget = listOf(MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER)
+            .map { mealType -> mealsByType.getValue(mealType) }
+            .firstOrNull { meal ->
+                findWorkStartingAt(date, meal.type.baseTime, workEvents, zoneId) == null
+            }
+            ?: breakfast
+        supplements += SupplementPlan(
+            name = "党参生脉饮",
+            scheduledAtEpochMillis = preMealTarget.scheduledAtEpochMillis - mealSupplementOffset.toMillis(),
+            note = "饭前"
+        )
+
+        return supplements
+            .filter { it.scheduledAtEpochMillis.toLocalDate(zoneId) == date }
+            .sortedBy { it.scheduledAtEpochMillis }
+    }
+
+    private fun supplementTimeForMeal(
+        date: LocalDate,
+        meal: MealPlan,
+        workEvents: List<ShiftEvent>,
+        zoneId: ZoneId
+    ): Long {
+        val blockingWork = findWorkStartingAt(date, meal.type.baseTime, workEvents, zoneId)
+        return if (blockingWork != null) {
+            blockingWork.endAtEpochMillis + mealMedicineOffset.toMillis()
+        } else {
+            meal.scheduledAtEpochMillis + mealMedicineOffset.toMillis()
+        }
+    }
+
+    private fun findWorkStartingAt(
+        date: LocalDate,
+        time: LocalTime,
+        workEvents: List<ShiftEvent>,
+        zoneId: ZoneId
+    ): ShiftEvent? {
+        return workEvents.firstOrNull { event ->
+            val start = event.startAtEpochMillis.toLocalDateTime(zoneId)
+            start.toLocalDate() == date && start.toLocalTime() == time
+        }
     }
 
     private fun sleepsForDate(
