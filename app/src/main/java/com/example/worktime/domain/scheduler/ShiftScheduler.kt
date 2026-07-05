@@ -16,8 +16,6 @@ class ShiftScheduler {
         val cutoff = plan.calculateEndAtEpochMillis()
         val workDurationMillis = Duration.ofMinutes(plan.workDurationMinutes.toLong()).toMillis()
         val restDurationMillis = Duration.ofMinutes(plan.restDurationMinutes.toLong()).toMillis()
-        val silentRemindMillis = Duration.ofMinutes(plan.silentRemindBeforeMinutes.toLong()).toMillis()
-        val departRemindMillis = Duration.ofMinutes(plan.departRemindBeforeMinutes.toLong()).toMillis()
 
         var cursor = plan.firstWorkStartAtEpochMillis
         var currentType = ShiftEventType.WORK
@@ -29,16 +27,12 @@ class ShiftScheduler {
                 restDurationMillis
             }
             val end = min(cursor + segmentDuration, cutoff)
-            val silentAlarmAt = if (currentType == ShiftEventType.WORK) cursor - silentRemindMillis else null
-            val departAlarmAt = if (currentType == ShiftEventType.WORK) cursor - departRemindMillis else null
 
             result += ShiftEvent(
                 planId = plan.id,
                 type = currentType,
                 startAtEpochMillis = cursor,
-                endAtEpochMillis = end,
-                silentAlarmTriggerAtEpochMillis = silentAlarmAt,
-                departAlarmTriggerAtEpochMillis = departAlarmAt
+                endAtEpochMillis = end
             )
 
             cursor = end

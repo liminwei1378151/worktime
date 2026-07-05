@@ -8,8 +8,6 @@ data class ShiftPlan(
     val id: Long = SINGLE_PLAN_ID,
     val totalDays: Int,
     val firstWorkStartAtEpochMillis: Long,
-    val silentRemindBeforeMinutes: Int = 15,
-    val departRemindBeforeMinutes: Int = 30,
     val updatedAtEpochMillis: Long = System.currentTimeMillis()
 ) {
     val workDurationMinutes: Int = 2 * 60
@@ -17,8 +15,6 @@ data class ShiftPlan(
 
     fun validate(): String? {
         if (totalDays <= 0) return "总天数必须大于 0"
-        if (silentRemindBeforeMinutes < 0) return "静音提醒分钟不能小于 0"
-        if (departRemindBeforeMinutes < 0) return "出发提醒分钟不能小于 0"
         return null
     }
 

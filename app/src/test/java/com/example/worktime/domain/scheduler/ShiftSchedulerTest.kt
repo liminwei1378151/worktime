@@ -17,9 +17,7 @@ class ShiftSchedulerTest {
     fun oneDayPlan_generatesAlternatingEventsWithinBoundary() {
         val plan = ShiftPlan(
             totalDays = 1,
-            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-14T08:00:00"),
-            silentRemindBeforeMinutes = 15,
-            departRemindBeforeMinutes = 30
+            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-14T08:00:00")
         )
 
         val events = scheduler.generate(plan)
@@ -34,27 +32,10 @@ class ShiftSchedulerTest {
     }
 
     @Test
-    fun remindBefore_canCrossToPreviousDay() {
-        val plan = ShiftPlan(
-            totalDays = 1,
-            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-14T01:00:00"),
-            silentRemindBeforeMinutes = 120,
-            departRemindBeforeMinutes = 30
-        )
-
-        val firstWork = scheduler.generate(plan).first()
-
-        assertEquals(toEpochMillis("2026-04-13T23:00:00"), firstWork.silentAlarmTriggerAtEpochMillis)
-        assertEquals(toEpochMillis("2026-04-14T00:30:00"), firstWork.departAlarmTriggerAtEpochMillis)
-    }
-
-    @Test
     fun startInPast_futureWorkCanBeFilteredByConsumer() {
         val plan = ShiftPlan(
             totalDays = 3,
-            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-10T08:00:00"),
-            silentRemindBeforeMinutes = 30,
-            departRemindBeforeMinutes = 45
+            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-10T08:00:00")
         )
 
         val events = scheduler.generate(plan)
@@ -68,9 +49,7 @@ class ShiftSchedulerTest {
     fun invalidPlan_throwsException() {
         val plan = ShiftPlan(
             totalDays = 0,
-            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-14T08:00:00"),
-            silentRemindBeforeMinutes = 15,
-            departRemindBeforeMinutes = 30
+            firstWorkStartAtEpochMillis = toEpochMillis("2026-04-14T08:00:00")
         )
 
         try {

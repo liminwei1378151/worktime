@@ -7,10 +7,7 @@ data class PlanHistoryEvent(
     val historyId: Long,
     val type: ShiftEventType,
     val startAtEpochMillis: Long,
-    val endAtEpochMillis: Long,
-    val alarmTriggerAtEpochMillis: Long?,
-    val silentAlarmTriggerAtEpochMillis: Long?,
-    val departAlarmTriggerAtEpochMillis: Long?
+    val endAtEpochMillis: Long
 )
 
 internal fun PlanHistoryEventEntity.toDomain(): PlanHistoryEvent {
@@ -19,10 +16,7 @@ internal fun PlanHistoryEventEntity.toDomain(): PlanHistoryEvent {
         historyId = historyId,
         type = ShiftEventType.valueOf(type),
         startAtEpochMillis = startAtEpochMillis,
-        endAtEpochMillis = endAtEpochMillis,
-        alarmTriggerAtEpochMillis = alarmTriggerAtEpochMillis,
-        silentAlarmTriggerAtEpochMillis = silentAlarmTriggerAtEpochMillis,
-        departAlarmTriggerAtEpochMillis = departAlarmTriggerAtEpochMillis
+        endAtEpochMillis = endAtEpochMillis
     )
 }
 
@@ -32,8 +26,8 @@ internal fun PlanHistoryEvent.toEntity(): PlanHistoryEventEntity {
         type = type.name,
         startAtEpochMillis = startAtEpochMillis,
         endAtEpochMillis = endAtEpochMillis,
-        alarmTriggerAtEpochMillis = alarmTriggerAtEpochMillis,
-        silentAlarmTriggerAtEpochMillis = silentAlarmTriggerAtEpochMillis,
-        departAlarmTriggerAtEpochMillis = departAlarmTriggerAtEpochMillis
+        alarmTriggerAtEpochMillis = null,
+        silentAlarmTriggerAtEpochMillis = null,
+        departAlarmTriggerAtEpochMillis = null
     )
 }

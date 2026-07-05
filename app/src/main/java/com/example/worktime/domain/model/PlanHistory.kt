@@ -6,8 +6,6 @@ data class PlanHistory(
     val id: Long,
     val totalDays: Int,
     val firstWorkStartAtEpochMillis: Long,
-    val silentRemindBeforeMinutes: Int,
-    val departRemindBeforeMinutes: Int,
     val updatedAtEpochMillis: Long,
     val savedAtEpochMillis: Long
 )
@@ -17,8 +15,6 @@ internal fun PlanHistoryEntity.toDomain(): PlanHistory {
         id = id,
         totalDays = totalDays,
         firstWorkStartAtEpochMillis = firstWorkStartAtEpochMillis,
-        silentRemindBeforeMinutes = silentRemindBeforeMinutes,
-        departRemindBeforeMinutes = departRemindBeforeMinutes,
         updatedAtEpochMillis = updatedAtEpochMillis,
         savedAtEpochMillis = savedAtEpochMillis
     )
@@ -29,8 +25,8 @@ internal fun PlanHistory.toEntity(): PlanHistoryEntity {
         id = id,
         totalDays = totalDays,
         firstWorkStartAtEpochMillis = firstWorkStartAtEpochMillis,
-        silentRemindBeforeMinutes = silentRemindBeforeMinutes,
-        departRemindBeforeMinutes = departRemindBeforeMinutes,
+        silentRemindBeforeMinutes = 0,
+        departRemindBeforeMinutes = 0,
         updatedAtEpochMillis = updatedAtEpochMillis,
         savedAtEpochMillis = savedAtEpochMillis
     )

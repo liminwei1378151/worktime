@@ -10,8 +10,5 @@ data class ShiftEvent(
     val planId: Long,
     val type: ShiftEventType,
     val startAtEpochMillis: Long,
-    val endAtEpochMillis: Long,
-    val alarmTriggerAtEpochMillis: Long? = null,
-    val silentAlarmTriggerAtEpochMillis: Long? = null,
-    val departAlarmTriggerAtEpochMillis: Long? = null
+    val endAtEpochMillis: Long
 )

@@ -10,15 +10,13 @@ import android.widget.RemoteViews
 import com.example.worktime.MainActivity
 import com.example.worktime.R
 import com.example.worktime.di.AppContainer
-import com.example.worktime.domain.model.LiverDoseReminderPlanner
-import com.example.worktime.domain.model.SleepSchedule
+import com.example.worktime.domain.model.DailyActivity
+import com.example.worktime.domain.model.ShiftEventType
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
-import com.example.worktime.domain.model.DailyActivity
-import com.example.worktime.domain.model.ShiftEventType
 import kotlinx.coroutines.runBlocking
 
 object WorktimeWidgetUpdater {
@@ -42,26 +40,7 @@ object WorktimeWidgetUpdater {
             val views = RemoteViews(context.packageName, R.layout.worktime_widget)
             views.setTextViewText(R.id.widgetLine1, display.line1)
             views.setTextViewText(R.id.widgetLine2, display.line2)
-            val hasLiverBadge = !display.badgeText.isNullOrEmpty()
-            val hasNapBadge = !display.napBadgeText.isNullOrEmpty()
-
-            views.setViewVisibility(
-                R.id.widgetBadgeRow,
-                if (hasLiverBadge || hasNapBadge) View.VISIBLE else View.GONE
-            )
-
-            if (!hasLiverBadge) {
-                views.setViewVisibility(R.id.widgetLiverBadge, View.GONE)
-            } else {
-                views.setViewVisibility(R.id.widgetLiverBadge, View.VISIBLE)
-                views.setTextViewText(R.id.widgetLiverBadge, display.badgeText)
-            }
-            if (!hasNapBadge) {
-                views.setViewVisibility(R.id.widgetNapBadge, View.GONE)
-            } else {
-                views.setViewVisibility(R.id.widgetNapBadge, View.VISIBLE)
-                views.setTextViewText(R.id.widgetNapBadge, display.napBadgeText)
-            }
+            views.setViewVisibility(R.id.widgetBadgeRow, View.GONE)
 
             val openAppIntent = Intent(context, MainActivity::class.java)
             val openAppPendingIntent = PendingIntent.getActivity(
@@ -82,9 +61,9 @@ object WorktimeWidgetUpdater {
         val allWorkEvents = repo.getFutureWorkEvents(now - Duration.ofHours(12).toMillis())
             .filter { it.type == ShiftEventType.WORK }
         val workEvents = allWorkEvents.filter { it.startAtEpochMillis >= now }
-        
+
         if (workEvents.isEmpty()) {
-            WidgetDisplay(line1 = "暂无排班", line2 = "暂无排班", badgeText = null, napBadgeText = null)
+            WidgetDisplay(line1 = "暂无排班", line2 = "暂无排班")
         } else {
             val next = workEvents[0]
             val nextDate = toLocalDate(next.startAtEpochMillis)
@@ -121,31 +100,10 @@ object WorktimeWidgetUpdater {
                     append(nextNextActivitiesText)
                 }
             } else {
-                val restStart = next.endAtEpochMillis
-                val restEndMillis = restStart + (8 * 60 * 60 * 1000L)
                 buildString { append("") }
             }
-            
-            val liverReminder = LiverDoseReminderPlanner.nextReminder(
-                nowEpochMillis = now,
-                futureWorkEvents = allWorkEvents
-            )
-            val badgeText = liverReminder?.let { "护肝 ${formatTime(it.remindAtEpochMillis)} 餐后" }
-            val sleepSchedule = SleepSchedule.calculate(nextHour, nextMinute)
-            val napBadgeText = sleepSchedule?.let { schedule ->
-                if (schedule.noSleepThisRound) {
-                    "睡眠 本轮不睡"
-                } else {
-                    val slot = schedule.sleepSlots.firstOrNull()
-                    if (slot == null) {
-                        null
-                    } else {
-                        "睡眠 ${slot.startTime.toString().substring(0, 5)}-${slot.endTime.toString().substring(0, 5)}"
-                    }
-                }
-            }
 
-            WidgetDisplay(line1 = line1, line2 = line2, badgeText = badgeText, napBadgeText = napBadgeText)
+            WidgetDisplay(line1 = line1, line2 = line2)
         }
     }
 
@@ -178,8 +136,6 @@ object WorktimeWidgetUpdater {
 
     private data class WidgetDisplay(
         val line1: String,
-        val line2: String,
-        val badgeText: String?,
-        val napBadgeText: String?
+        val line2: String
     )
 }

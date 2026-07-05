@@ -27,11 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -39,7 +36,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -61,13 +57,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.worktime.domain.model.LiverDoseReminderSource
 import com.example.worktime.domain.model.PlanHistoryEvent
 import com.example.worktime.domain.model.ShiftEventType
 import com.example.worktime.domain.model.ShiftPlan
+import com.example.worktime.domain.planner.DailyRoutinePlan
 import com.example.worktime.widget.WidgetPinResultReceiver
 import com.example.worktime.widget.WorktimeWidgetProvider
-import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -76,9 +71,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private enum class MainTab(val title: String) {
-    HOME("首页"),
-    EDITOR("方案"),
     CALENDAR("日历"),
+    EDITOR("方案"),
     SETTINGS("设置")
 }
 
@@ -140,24 +134,6 @@ fun WorktimeApp(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             when (currentTab) {
-                MainTab.HOME -> HomeScreen(
-                    uiState = uiState,
-                    onCreateAlarms = viewModel::createAlarms,
-                    onRebuildAlarms = viewModel::rebuildAlarms,
-                    onAddWidget = {
-                        val message = requestAddWidget(context)
-                        viewModel.showMessage(message)
-                    },
-                    onGoEditor = { currentTabIndex = MainTab.EDITOR.ordinal }
-                )
-
-                MainTab.EDITOR -> EditorScreen(
-                    plan = uiState.plan,
-                    defaultRemindMinutes = uiState.defaultRemindMinutes,
-                    isBusy = uiState.isBusy,
-                    onSavePlan = viewModel::savePlan
-                )
-
                 MainTab.CALENDAR -> CalendarScreen(
                     uiState = uiState,
                     onPrevMonth = { viewModel.changeMonth(-1) },
@@ -168,8 +144,16 @@ fun WorktimeApp(
                 )
 
                 MainTab.SETTINGS -> SettingsScreen(
-                    defaultRemindMinutes = uiState.defaultRemindMinutes,
-                    onSaveDefaultRemind = viewModel::saveDefaultRemindMinutes
+                    onAddWidget = {
+                        val message = requestAddWidget(context)
+                        viewModel.showMessage(message)
+                    }
+                )
+
+                MainTab.EDITOR -> EditorScreen(
+                    plan = uiState.plan,
+                    isBusy = uiState.isBusy,
+                    onSavePlan = viewModel::savePlan
                 )
             }
         }
@@ -177,206 +161,13 @@ fun WorktimeApp(
 }
 
 @Composable
-private fun HomeScreen(
-    uiState: MainUiState,
-    onCreateAlarms: () -> Unit,
-    onRebuildAlarms: () -> Unit,
-    onAddWidget: () -> Unit,
-    onGoEditor: () -> Unit
-) {
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("当前方案", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    val plan = uiState.plan
-                    if (plan == null) {
-                        Text("还没有配置倒班方案")
-                    } else {
-                        Text("共 ${plan.totalDays} 天")
-                        Text("工作2小时，休息8小时")
-                        Text("首次上班：${formatDateTime(plan.firstWorkStartAtEpochMillis)}")
-                        Text("结束时间：最后一天 12:30")
-                        Text("静音闹钟：提前 ${plan.silentRemindBeforeMinutes} 分钟")
-                        Text("出发闹钟：提前 ${plan.departRemindBeforeMinutes} 分钟")
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Button(onClick = onGoEditor) { Text("编辑方案") }
-                }
-}
-    }
-    item {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("下一次上班", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                val next = uiState.nextWorkEvent
-                if (next == null) {
-                    Text("当前没有未来上班时间")
-                } else {
-                    val workHour = java.time.Instant.ofEpochMilli(next.startAtEpochMillis)
-                        .atZone(java.time.ZoneId.systemDefault()).hour
-                    val workMinute = java.time.Instant.ofEpochMilli(next.startAtEpochMillis)
-                        .atZone(java.time.ZoneId.systemDefault()).minute
-                    val activities = com.example.worktime.domain.model.DailyActivity.getActivitiesForWork(workHour, workMinute)
-                    val activitiesText = if (activities.isNotEmpty()) " ${activities.joinToString(" ")}" else ""
-                    Text("${formatRelativeDate(next.startAtEpochMillis, uiState.nowEpochMillis)} ${formatTimeRange(next.startAtEpochMillis, next.endAtEpochMillis)}$activitiesText")
-                }
-
-                val liverReminder = uiState.nextLiverDoseReminder
-                if (liverReminder == null) {
-                    Text(
-                        "护肝片：当前无提醒",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    val hint = if (liverReminder.source == LiverDoseReminderSource.MEAL_WINDOW) {
-                        "餐后服用"
-                    } else {
-                        "先吃点东西再服用"
-                    }
-                    Text(
-                        "护肝片建议：${formatRelativeDate(liverReminder.remindAtEpochMillis, uiState.nowEpochMillis)} ${formatClockTime(liverReminder.remindAtEpochMillis)}（$hint）",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-            }
-        }
-    }
-    if (uiState.recentSleepSchedule != null || uiState.nextSleepSchedule != null) {
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("建议睡眠安排", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    val recentSchedule = uiState.recentSleepSchedule
-                    if (recentSchedule == null) {
-                        Text(
-                            text = "刚上完班后：暂无建议",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else if (recentSchedule.noSleepThisRound) {
-                        Text(
-                            text = "刚上完班后：本轮不睡（工作 ${formatHourMinute(recentSchedule.workStartHour, recentSchedule.workStartMinute)}-${formatHourMinute(recentSchedule.workEndHour, recentSchedule.workEndMinute)}）",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        recentSchedule.sleepSlots.forEach { slot ->
-                            val startStr = slot.startTime.toString().substring(0, 5)
-                            val endStr = slot.endTime.toString().substring(0, 5)
-                            Text(
-                                text = "刚上完班后（工作 ${formatHourMinute(recentSchedule.workStartHour, recentSchedule.workStartMinute)}-${formatHourMinute(recentSchedule.workEndHour, recentSchedule.workEndMinute)}）：睡眠 $startStr - $endStr",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-
-                    val nextSchedule = uiState.nextSleepSchedule
-                    if (nextSchedule == null) {
-                        Text(
-                            text = "下次上完班后：暂无建议",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else if (nextSchedule.noSleepThisRound) {
-                        Text(
-                            text = "下次上完班后：本轮不睡（工作 ${formatHourMinute(nextSchedule.workStartHour, nextSchedule.workStartMinute)}-${formatHourMinute(nextSchedule.workEndHour, nextSchedule.workEndMinute)}）",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        nextSchedule.sleepSlots.forEach { slot ->
-                            val startStr = slot.startTime.toString().substring(0, 5)
-                            val endStr = slot.endTime.toString().substring(0, 5)
-                            Text(
-                                text = "下次上完班后（工作 ${formatHourMinute(nextSchedule.workStartHour, nextSchedule.workStartMinute)}-${formatHourMinute(nextSchedule.workEndHour, nextSchedule.workEndMinute)}）：睡眠 $startStr - $endStr",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-    item {
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("闹钟状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text("已同步系统闹钟：${uiState.alarmMappings.size} 个")
-                    Text(
-                        text = uiState.nextAlarmMapping?.let { "下一次系统闹钟：${formatDateTime(it.triggerAtEpochMillis)}" }
-                            ?: "下一次系统闹钟：暂无"
-                    )
-                    Text(
-                        text = "系统时钟接口限制：一次创建一个闹钟",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "说明：创建系统闹钟无需弹窗授权，若系统不允许静默创建会自动打开系统时钟页面",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "兼容策略：静默创建失败时自动回退到时钟页面/时钟应用",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
-                            onClick = onCreateAlarms,
-                            enabled = !uiState.isBusy
-                        ) {
-                            Text("一键创建闹钟")
-                        }
-                        FilledTonalButton(
-                            onClick = onRebuildAlarms,
-                            enabled = !uiState.isBusy
-                        ) {
-                            Text("重建闹钟")
-                        }
-                    }
-                    Button(
-                        onClick = onAddWidget,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("添加桌面小组件")
-                    }
-                }
-            }
-        }
-    }
-
-    if (uiState.isBusy) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator()
-        }
-    }
-}
-
-@Composable
 private fun EditorScreen(
     plan: ShiftPlan?,
-    defaultRemindMinutes: Int,
     isBusy: Boolean,
-    onSavePlan: (ShiftPlan, Boolean) -> Unit
+    onSavePlan: (ShiftPlan) -> Unit
 ) {
     var totalDaysText by rememberSaveable { mutableStateOf("") }
     var firstStartText by rememberSaveable { mutableStateOf("") }
-    var silentRemindText by rememberSaveable { mutableStateOf("15") }
-    var departRemindText by rememberSaveable { mutableStateOf("30") }
-    var createAlarmsAfterSave by rememberSaveable { mutableStateOf(false) }
     var localError by rememberSaveable { mutableStateOf<String?>(null) }
 
     LaunchedEffect(plan?.updatedAtEpochMillis) {
@@ -385,13 +176,9 @@ private fun EditorScreen(
             val defaultStart = LocalDateTime.now().plusHours(1).withMinute(0).withSecond(0)
             totalDaysText = "30"
             firstStartText = defaultStart.format(DATE_TIME_PATTERN)
-            silentRemindText = "15"
-            departRemindText = "30"
         } else {
             totalDaysText = sourcePlan.totalDays.toString()
             firstStartText = formatDateTime(sourcePlan.firstWorkStartAtEpochMillis)
-            silentRemindText = sourcePlan.silentRemindBeforeMinutes.toString()
-            departRemindText = sourcePlan.departRemindBeforeMinutes.toString()
         }
     }
 
@@ -425,39 +212,6 @@ private fun EditorScreen(
                 label = { Text("首次工作开始时间") }
             )
         }
-        item {
-            OutlinedTextField(
-                value = silentRemindText,
-                onValueChange = { silentRemindText = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("静音闹钟提前（分钟）") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-        }
-        item {
-            OutlinedTextField(
-                value = departRemindText,
-                onValueChange = { departRemindText = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("出发闹钟提前（分钟）") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-            )
-        }
-        item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("保存后立即创建闹钟")
-                Switch(
-                    checked = createAlarmsAfterSave,
-                    onCheckedChange = { createAlarmsAfterSave = it }
-                )
-            }
-        }
         localError?.let { error ->
             item {
                 Text(
@@ -471,13 +225,9 @@ private fun EditorScreen(
             Button(
                 onClick = {
                     val totalDays = totalDaysText.toIntOrNull()
-                    val silentRemind = silentRemindText.toIntOrNull()
-                    val departRemind = departRemindText.toIntOrNull()
                     val startAtMillis = parseDateTimeMillis(firstStartText)
 
-                    if (totalDays == null || silentRemind == null ||
-                        departRemind == null || startAtMillis == null
-                    ) {
+                    if (totalDays == null || startAtMillis == null) {
                         localError = "请输入合法数字，并确认时间格式为 yyyy-MM-dd HH:mm"
                         return@Button
                     }
@@ -485,13 +235,11 @@ private fun EditorScreen(
                     val newPlan = ShiftPlan(
                         id = ShiftPlan.SINGLE_PLAN_ID,
                         totalDays = totalDays,
-                        firstWorkStartAtEpochMillis = startAtMillis,
-                        silentRemindBeforeMinutes = silentRemind,
-                        departRemindBeforeMinutes = departRemind
+                        firstWorkStartAtEpochMillis = startAtMillis
                     )
                     localError = newPlan.validate()
                     if (localError == null) {
-                        onSavePlan(newPlan, createAlarmsAfterSave)
+                        onSavePlan(newPlan)
                     }
                 },
                 enabled = !isBusy,
@@ -729,8 +477,8 @@ private fun CalendarScreen(
             if (dayEvents.isEmpty() && dayHistoryEvents.isEmpty()) {
                 Text("当天无事件")
             } else {
-                dayEvents.forEach { event ->
-                    val typeText = if (event.type == ShiftEventType.WORK) "工作" else "休息"
+                    dayEvents.forEach { event ->
+                        val typeText = if (event.type == ShiftEventType.WORK) "工作" else "休息"
                     val activitiesText = if (event.type == ShiftEventType.WORK) {
                         val workHour = java.time.Instant.ofEpochMilli(event.startAtEpochMillis)
                             .atZone(java.time.ZoneId.systemDefault()).hour
@@ -743,6 +491,9 @@ private fun CalendarScreen(
                         text = "$typeText ${formatTimeRange(event.startAtEpochMillis, event.endAtEpochMillis)}$activitiesText"
                     )
                 }
+
+                val routinePlan = uiState.selectedDateRoutinePlan
+                DailyRoutineSection(routinePlan = routinePlan)
 
                 if (dayHistoryEvents.isNotEmpty()) {
                     Spacer(Modifier.height(8.dp))
@@ -802,6 +553,49 @@ private fun CalendarScreen(
 }
 
 @Composable
+private fun DailyRoutineSection(routinePlan: DailyRoutinePlan) {
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = "当天规划",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold
+    )
+
+    Text(
+        text = "吃饭",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+    routinePlan.meals.forEach { meal ->
+        Text("${meal.type.label} ${formatClockTime(meal.scheduledAtEpochMillis)} ${meal.note}")
+    }
+
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = "补品",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+    routinePlan.supplements.forEach { supplement ->
+        Text("${formatClockTime(supplement.scheduledAtEpochMillis)} ${supplement.name} ${supplement.note}")
+    }
+
+    Spacer(Modifier.height(6.dp))
+    Text(
+        text = "睡觉",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+    if (routinePlan.sleeps.isEmpty()) {
+        Text("当天没有合适的完整睡眠窗口，优先抽空休息。")
+    } else {
+        routinePlan.sleeps.forEach { sleep ->
+            Text("${formatSleepRange(sleep.startAtEpochMillis, sleep.endAtEpochMillis)} ${sleep.note}")
+        }
+    }
+}
+
+@Composable
 private fun EditHistoryEventDialog(
     event: PlanHistoryEvent,
     onDismiss: () -> Unit,
@@ -856,14 +650,8 @@ private fun EditHistoryEventDialog(
 
 @Composable
 private fun SettingsScreen(
-    defaultRemindMinutes: Int,
-    onSaveDefaultRemind: (Int) -> Unit
+    onAddWidget: () -> Unit
 ) {
-    var input by rememberSaveable { mutableStateOf(defaultRemindMinutes.toString()) }
-    LaunchedEffect(defaultRemindMinutes) {
-        input = defaultRemindMinutes.toString()
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
             text = "设置",
@@ -871,26 +659,15 @@ private fun SettingsScreen(
             fontWeight = FontWeight.Bold
         )
         Text(
-            text = "默认提前提醒分钟会在新建方案时自动填入。",
+            text = "可在这里管理桌面小组件入口。",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        OutlinedTextField(
-            value = input,
-            onValueChange = { input = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("默认提前提醒（分钟）") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
         Button(
-            onClick = {
-                val minutes = input.toIntOrNull()
-                if (minutes != null) {
-                    onSaveDefaultRemind(minutes)
-                }
-            }
+            onClick = onAddWidget,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text("保存设置")
+            Text("添加桌面小组件")
         }
     }
 }
@@ -911,19 +688,6 @@ private fun formatDateTime(epochMillis: Long): String {
     )
 }
 
-private fun formatRelativeDate(epochMillis: Long, nowEpochMillis: Long): String {
-    val eventDate = Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
-    val today = Instant.ofEpochMilli(nowEpochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
-    val daysDiff = java.time.temporal.ChronoUnit.DAYS.between(today, eventDate).toInt()
-    return when (daysDiff) {
-        0 -> "今天"
-        1 -> "明天"
-        2 -> "后天"
-        in 3..4 -> "${daysDiff}天后"
-        else -> "${eventDate.monthValue}月${eventDate.dayOfMonth}日"
-    }
-}
-
 private fun formatTimeRange(startEpochMillis: Long, endEpochMillis: Long): String {
     val startTime = Instant.ofEpochMilli(startEpochMillis).atZone(ZoneId.systemDefault()).toLocalTime()
     val endTime = Instant.ofEpochMilli(endEpochMillis).atZone(ZoneId.systemDefault()).toLocalTime()
@@ -937,27 +701,15 @@ private fun formatClockTime(epochMillis: Long): String {
     return String.format("%02d:%02d", time.hour, time.minute)
 }
 
-private fun formatHourMinute(hour: Int, minute: Int): String {
-    return String.format("%02d:%02d", hour, minute)
+private fun formatSleepRange(startEpochMillis: Long, endEpochMillis: Long): String {
+    val start = Instant.ofEpochMilli(startEpochMillis).atZone(ZoneId.systemDefault())
+    val end = Instant.ofEpochMilli(endEpochMillis).atZone(ZoneId.systemDefault())
+    val endPrefix = if (end.toLocalDate() != start.toLocalDate()) "次日" else ""
+    return "${formatClockTime(startEpochMillis)}-${endPrefix}${formatClockTime(endEpochMillis)}"
 }
 
 private fun toLocalDate(epochMillis: Long): LocalDate {
     return Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
-}
-
-private fun formatMinutes(minutes: Int): String {
-    val hours = minutes / 60
-    val mins = minutes % 60
-    return "${hours}小时${mins}分钟"
-}
-
-private fun formatCountdown(nowEpochMillis: Long, targetEpochMillis: Long): String {
-    if (targetEpochMillis <= nowEpochMillis) return "已开始"
-    val duration = Duration.ofMillis(targetEpochMillis - nowEpochMillis)
-    val days = duration.toDays()
-    val hours = duration.toHours() % 24
-    val minutes = duration.toMinutes() % 60
-    return "${days}天${hours}小时${minutes}分钟"
 }
 
 private fun buildMonthCells(month: YearMonth): List<LocalDate?> {

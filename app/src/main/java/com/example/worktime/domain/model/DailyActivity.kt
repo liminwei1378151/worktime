@@ -7,17 +7,16 @@ data class DailyActivity(
 ) {
     companion object {
         private val ALL_ACTIVITIES = listOf(
-            DailyActivity("qc", 390, 510),
-            DailyActivity("xs", 390, 510),
-            DailyActivity("tj", 390, 510),
-            DailyActivity("cf", 390, 510),
-            DailyActivity("cf", 630, 750),
-            DailyActivity("cf", 990, 1110),
-            DailyActivity("sj", 750, 870),
-            DailyActivity("qc", 870, 990),
-            DailyActivity("tj", 1110, 1230),
-            DailyActivity("xs", 1230, 1350),
-            DailyActivity("sj", 1350, 30)
+            DailyActivity("qc", 360, 480),
+            DailyActivity("tj", 360, 480),
+            DailyActivity("cf", 360, 480),
+            DailyActivity("cf", 600, 720),
+            DailyActivity("sj", 720, 840),
+            DailyActivity("qc", 840, 960),
+            DailyActivity("cf", 960, 1080),
+            DailyActivity("tj", 1080, 1200),
+            DailyActivity("xs", 1320, 1440),
+            DailyActivity("sj", 1320, 1440)
         )
 
         fun getActivitiesForWork(startHour: Int, startMinute: Int, workDurationMinutes: Int = 120): List<String> {

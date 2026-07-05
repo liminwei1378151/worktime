@@ -19,8 +19,6 @@ class MainActivity : ComponentActivity() {
                 val viewModel = viewModel<com.example.worktime.ui.MainViewModel>(
                     factory = MainViewModelFactory(
                         repository = AppContainer.repository(applicationContext),
-                        settingsStore = AppContainer.settingsStore(applicationContext),
-                        alarmScheduler = AppContainer.alarmScheduler(applicationContext),
                         widgetRefresher = AppContainer.widgetRefresher(applicationContext)
                     )
                 )

@@ -1,14 +1,11 @@
 package com.example.worktime.ui
 
-import com.example.worktime.data.local.settings.SettingsStore
-import com.example.worktime.domain.model.AlarmMapping
-import com.example.worktime.domain.model.LiverDoseReminder
-import com.example.worktime.domain.model.LiverDoseReminderPlanner
 import com.example.worktime.domain.model.PlanHistoryEvent
 import com.example.worktime.domain.model.ShiftEvent
 import com.example.worktime.domain.model.ShiftEventType
 import com.example.worktime.domain.model.ShiftPlan
-import com.example.worktime.domain.model.SleepSchedule
+import com.example.worktime.domain.planner.DailyRoutinePlan
+import com.example.worktime.domain.planner.DailyRoutinePlanner
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -17,9 +14,7 @@ import java.time.ZoneId
 data class MainUiState(
     val plan: ShiftPlan? = null,
     val events: List<ShiftEvent> = emptyList(),
-    val alarmMappings: List<AlarmMapping> = emptyList(),
     val historyEvents: List<PlanHistoryEvent> = emptyList(),
-    val defaultRemindMinutes: Int = SettingsStore.DEFAULT_REMIND_MINUTES,
     val selectedMonth: YearMonth = YearMonth.now(),
     val selectedDate: LocalDate = LocalDate.now(),
     val nowEpochMillis: Long = System.currentTimeMillis(),
@@ -31,9 +26,6 @@ data class MainUiState(
 
     val nextWorkEvent: ShiftEvent?
         get() = workEvents.firstOrNull { it.startAtEpochMillis >= nowEpochMillis }
-
-    val nextAlarmMapping: AlarmMapping?
-        get() = alarmMappings.firstOrNull { it.triggerAtEpochMillis >= nowEpochMillis }
 
     val remainingWorkCount: Int
         get() = workEvents.count { it.startAtEpochMillis >= nowEpochMillis }
@@ -65,24 +57,10 @@ data class MainUiState(
                 .toLocalDate()
         }.toSet()
 
-    val nextSleepSchedule: SleepSchedule?
-        get() = nextWorkEvent?.toSleepSchedule()
-
-    val recentSleepSchedule: SleepSchedule?
-        get() = workEvents
-            .lastOrNull { it.endAtEpochMillis <= nowEpochMillis }
-            ?.toSleepSchedule()
-
-    val nextLiverDoseReminder: LiverDoseReminder?
-        get() = LiverDoseReminderPlanner.nextReminder(
-            nowEpochMillis = nowEpochMillis,
-            futureWorkEvents = workEvents
+    val selectedDateRoutinePlan: DailyRoutinePlan
+        get() = DailyRoutinePlanner.planForDate(
+            date = selectedDate,
+            events = events,
+            zoneId = ZoneId.systemDefault()
         )
-
-    private fun ShiftEvent.toSleepSchedule(): SleepSchedule? {
-        val localTime = Instant.ofEpochMilli(startAtEpochMillis)
-            .atZone(ZoneId.systemDefault())
-            .toLocalTime()
-        return SleepSchedule.calculate(localTime.hour, localTime.minute)
-    }
 }
